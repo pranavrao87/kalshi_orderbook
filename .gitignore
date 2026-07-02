@@ -1,0 +1,41 @@
+# Object files
+*.o
+*.obj
+
+# Static and shared libraries
+*.a
+*.lib
+*.la
+*.lo
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# Executables
+*.exe
+*.out
+*.app
+a.out
+
+# CMake / C++ build output
+**/build/
+cmake-build-*/
+
+# Project targets (no file extension on Unix)
+kalshi_smoke
+myprogram
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Environment / secrets
+.env
+.env.*
+
+# macOS
+.DS_Store
