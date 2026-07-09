@@ -23,8 +23,7 @@ a.out
 cmake-build-*/
 
 # Project targets (no file extension on Unix)
-kalshi_smoke
-myprogram
+kalshi_orderbook
 
 # Python
 __pycache__/
