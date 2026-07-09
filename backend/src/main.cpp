@@ -1,46 +1,50 @@
 #include <iostream>
 #include <string>
 #include <curl/curl.h>
+#include <nlohmann/json.hpp>
 #include "kalshi_rest.h"
 
-int main() {
-    std::string url = "https://external-api.kalshi.com/trade-api/v2/series/KXHIGHNY";
+using json = nlohmann::json;
 
-    // 1. Initialize libcurl globally (should be called once in your app)
+int main() {
     curl_global_init(CURL_GLOBAL_DEFAULT);
 
-    // 2. Initialize a local easy handle session
-    CURL* curl = curl_easy_init();
-    std::string responseString;
-    
-    if (curl) {
-        // 3. Set the target URL
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    try {
+        const std::string markets_url =
+            "https://external-api.kalshi.com/trade-api/v2/markets"
+            "?series_ticker=KXWCADVANCE&status=open";
 
-        // 4. Custom User-Agent (Highly recommended; some APIs reject empty agents)
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+        json markets_data = json::parse(fetch(markets_url));
 
-        // 5. Configure the callback to capture the response data
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseString);
+        std::cout << "\nActive markets in KXWCADVANCE series:\n";
 
-        // 6. Perform the blocking network request
-        CURLcode res = curl_easy_perform(curl);
-
-        // 7. Check for errors
-        if (res != CURLE_OK) {
-            std::cerr << "cURL Error: " << curl_easy_strerror(res) << std::endl;
-        } else {
-            // Success! Print the response
-            std::cout << "Response:\n" << responseString << std::endl;
+        for (const auto& market : markets_data["markets"]) {
+            std::cout << "- " << market["ticker"].get<std::string>()
+                      << ": " << market["title"].get<std::string>() << "\n";
+            std::cout << "  Event: " << market["event_ticker"].get<std::string>() << "\n";
+            std::cout << "  Yes Price: $" << market["yes_bid_dollars"].get<std::string>()
+                      << " | Volume: " << market["volume_fp"].get<std::string>() << "\n\n";
         }
 
-        // 8. Clean up the local handle
-        curl_easy_cleanup(curl);
+        if (!markets_data["markets"].empty()) {
+            const std::string event_ticker =
+                markets_data["markets"][0]["event_ticker"].get<std::string>();
+
+            const std::string event_url =
+                "https://external-api.kalshi.com/trade-api/v2/events/" + event_ticker;
+
+            json event_data = json::parse(fetch(event_url));
+
+            std::cout << "Event Details:\n";
+            std::cout << "Title: " << event_data["event"]["title"].get<std::string>() << "\n";
+            std::cout << "Category: " << event_data["event"]["category"].get<std::string>() << "\n";
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << "\n";
+        curl_global_cleanup();
+        return 1;
     }
 
-    // 9. Clean up global state
     curl_global_cleanup();
-            
     return 0;
 }
