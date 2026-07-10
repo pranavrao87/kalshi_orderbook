@@ -9,6 +9,12 @@ find_package(CURL REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(nlohmann_json REQUIRED)
-add_executable(kalshi_orderbook src/main.cpp src/kalshi_rest.cpp)
+add_executable(kalshi_orderbook
+  src/main.cpp
+  src/kalshi_rest.cpp
+  src/kalshi_auth.cpp
+  src/kalshi_ws.cpp
+  src/orderbook.cpp
+)
 target_link_libraries(kalshi_orderbook PRIVATE CURL::libcurl OpenSSL::SSL OpenSSL::Crypto spdlog::spdlog nlohmann_json::nlohmann_json)
 target_include_directories(kalshi_orderbook PRIVATE include)
