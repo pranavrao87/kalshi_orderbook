@@ -103,22 +103,36 @@ std::string extract_outcome_key(const std::string& market_ticker, const std::str
 }
 
 std::string pick_match_title(const std::vector<MarketEventGroup>& groups) {
-    for (const auto& group : groups) {
-        if (group.series_ticker == "KXWCADVANCE" && !group.title.empty()) {
-            return group.title;
-        }
-        if (group.series_ticker == "KXWCGAME" && !group.title.empty()) {
-            const std::string suffix = ": Regulation Time Moneyline";
-            if (group.title.size() > suffix.size() &&
-                group.title.compare(group.title.size() - suffix.size(), suffix.size(), suffix) == 0) {
-                return group.title.substr(0, group.title.size() - suffix.size());
+    static const std::vector<std::string> preferred_series = {
+        "KXWCADVANCE",
+        "KXWCGAME",
+        "KXWC1H",
+        "KXWCSCORE",
+        "KXWCTOTAL",
+    };
+
+    for (const std::string& series_ticker : preferred_series) {
+        for (const auto& group : groups) {
+            if (group.series_ticker != series_ticker || group.title.empty()) {
+                continue;
             }
-            return group.title;
+
+            std::string title = group.title;
+            const auto colon = title.find(':');
+            if (colon != std::string::npos) {
+                title = title.substr(0, colon);
+            }
+            return title;
         }
     }
 
-    if (!groups.empty()) {
-        return groups.front().title;
+    if (!groups.empty() && !groups.front().title.empty()) {
+        std::string title = groups.front().title;
+        const auto colon = title.find(':');
+        if (colon != std::string::npos) {
+            title = title.substr(0, colon);
+        }
+        return title;
     }
 
     return {};

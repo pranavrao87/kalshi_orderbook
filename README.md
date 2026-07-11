@@ -88,5 +88,6 @@ This connects to Kalshi's WebSocket API, subscribes to `orderbook_delta` for all
 
 - [x] Subscribe to Kalshi orderbook / market data feeds
 - [x] Maintain per-market bid/ask books locally
+- [x] Add executable pricing helpers (best bid/ask, implied probability)
 - [ ] Define arbitrage rules for related Kalshi markets
 - [ ] Surface opportunities (logs, alerts, or frontend)

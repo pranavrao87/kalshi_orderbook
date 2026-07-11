@@ -91,6 +91,68 @@ void handle_message(
     spdlog::debug("ignored message type {}: {}", type, message.dump());
 }
 
+void print_pricing_summary(
+    const MarketRegistry& registry,
+    const std::map<std::string, MarketOrderbook>& books,
+    std::ostream& out) {
+    static const std::vector<std::string> key_series = {
+        "KXWCADVANCE",
+        "KXWCGAME",
+        "KXWCSCORE",
+        "KXWCTOTAL",
+        "KXWCMOV",
+    };
+
+    out << "\nPricing summary (executable quotes)\n";
+    out << "Only markets with loaded orderbook data are shown.\n";
+    out << "Let the app run ~30s after subscribing so snapshots can arrive.\n\n";
+
+    for (const auto& match : registry.matches()) {
+        out << match.match_slug;
+        if (!match.title.empty()) {
+            out << " | " << match.title;
+        }
+        out << "\n";
+
+        for (const std::string& series_ticker : key_series) {
+            bool printed_series = false;
+
+            for (const auto& event_group : match.event_groups) {
+                if (event_group.series_ticker != series_ticker) {
+                    continue;
+                }
+
+                if (!printed_series) {
+                    out << "  " << series_role_label(event_group.series_ticker) << " ["
+                        << event_group.competition_scope << "]:\n";
+                    printed_series = true;
+                }
+
+                std::size_t shown = 0;
+                for (const auto& market : event_group.markets) {
+                    const auto book_it = books.find(market.ticker);
+                    if (book_it == books.end() || !book_it->second.has_liquidity()) {
+                        continue;
+                    }
+
+                    out << "    ";
+                    if (!market.yes_sub_title.empty()) {
+                        out << market.yes_sub_title << " | ";
+                    } else if (!market.title.empty()) {
+                        out << market.title << " | ";
+                    }
+                    book_it->second.print_quote(out);
+                    ++shown;
+                }
+
+                if (shown == 0) {
+                    out << "    (no orderbook data loaded)\n";
+                }
+            }
+        }
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -143,6 +205,7 @@ int main() {
             handle_message(message, books);
         }
 
+        print_pricing_summary(registry, books, std::cout);
         websocket.close();
         spdlog::info("disconnected");
     } catch (const std::exception& e) {

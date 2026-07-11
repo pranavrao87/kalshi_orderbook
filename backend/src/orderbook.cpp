@@ -1,5 +1,6 @@
 #include "orderbook.h"
 
+#include <cmath>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -38,6 +39,8 @@ const nlohmann::json* find_side_levels(const nlohmann::json& payload, const std:
     return nullptr;
 }
 
+constexpr double kPriceTolerance = 0.0001;
+
 }  // namespace
 
 void MarketOrderbook::set_levels(
@@ -60,6 +63,42 @@ void MarketOrderbook::set_levels(
             levels[price] = size;
         }
     }
+}
+
+std::optional<Quote> MarketOrderbook::best_bid(const std::map<std::string, std::string>& levels) {
+    if (levels.empty()) {
+        return std::nullopt;
+    }
+
+    const auto best = levels.rbegin();
+    return Quote{
+        .price = parse_fixed_point(best->first),
+        .size = parse_fixed_point(best->second),
+    };
+}
+
+std::optional<Quote> MarketOrderbook::best_ask(const std::map<std::string, std::string>& levels) {
+    if (levels.empty()) {
+        return std::nullopt;
+    }
+
+    const auto best = levels.begin();
+    return Quote{
+        .price = parse_fixed_point(best->first),
+        .size = parse_fixed_point(best->second),
+    };
+}
+
+std::optional<double> MarketOrderbook::size_at_price(
+    const std::map<std::string, std::string>& levels,
+    double price) {
+    for (const auto& [level_price, level_size] : levels) {
+        if (std::abs(parse_fixed_point(level_price) - price) <= kPriceTolerance) {
+            return parse_fixed_point(level_size);
+        }
+    }
+
+    return std::nullopt;
 }
 
 void MarketOrderbook::load_snapshot(const nlohmann::json& message) {
@@ -98,6 +137,108 @@ void MarketOrderbook::apply_delta(const nlohmann::json& message) {
     } else {
         levels[price] = format_fixed_point(next_size);
     }
+}
+
+bool MarketOrderbook::has_liquidity() const {
+    return !yes_levels_.empty() || !no_levels_.empty();
+}
+
+std::optional<Quote> MarketOrderbook::best_yes_bid() const {
+    return best_bid(yes_levels_);
+}
+
+std::optional<Quote> MarketOrderbook::best_yes_ask() const {
+    // Subscriptions use use_yes_price=true, so no_levels are YES asks on the yes-leg scale.
+    return best_ask(no_levels_);
+}
+
+std::optional<Quote> MarketOrderbook::best_no_bid() const {
+    const auto yes_ask = best_yes_ask();
+    if (!yes_ask) {
+        return std::nullopt;
+    }
+
+    return Quote{
+        .price = 1.0 - yes_ask->price,
+        .size = yes_ask->size,
+    };
+}
+
+std::optional<Quote> MarketOrderbook::best_no_ask() const {
+    const auto yes_bid = best_yes_bid();
+    if (!yes_bid) {
+        return std::nullopt;
+    }
+
+    return Quote{
+        .price = 1.0 - yes_bid->price,
+        .size = yes_bid->size,
+    };
+}
+
+std::optional<double> MarketOrderbook::implied_yes_prob() const {
+    const auto ask = best_yes_ask();
+    if (!ask) {
+        return std::nullopt;
+    }
+
+    return ask->price;
+}
+
+std::optional<double> MarketOrderbook::implied_no_prob() const {
+    const auto ask = best_no_ask();
+    if (!ask) {
+        return std::nullopt;
+    }
+
+    return ask->price;
+}
+
+std::optional<double> MarketOrderbook::mid_yes_prob() const {
+    const auto bid = best_yes_bid();
+    const auto ask = best_yes_ask();
+    if (!bid || !ask) {
+        return std::nullopt;
+    }
+
+    return (bid->price + ask->price) / 2.0;
+}
+
+std::optional<double> MarketOrderbook::executable_size_at(const std::string& side, double price) const {
+    if (side == "yes") {
+        return size_at_price(yes_levels_, price);
+    }
+    if (side == "no") {
+        return size_at_price(no_levels_, price);
+    }
+
+    return std::nullopt;
+}
+
+void MarketOrderbook::print_quote(std::ostream& out) const {
+    out << market_ticker_;
+
+    const auto yes_bid = best_yes_bid();
+    const auto yes_ask = best_yes_ask();
+
+    out << std::fixed << std::setprecision(4);
+    if (yes_bid) {
+        out << " | yes bid $" << yes_bid->price << " x " << yes_bid->size;
+    } else {
+        out << " | yes bid n/a";
+    }
+
+    if (yes_ask) {
+        out << " | yes ask $" << yes_ask->price << " x " << yes_ask->size;
+    } else {
+        out << " | yes ask n/a";
+    }
+
+    if (const auto mid = mid_yes_prob()) {
+        out << " | mid $" << *mid;
+    }
+
+    out << "\n";
 }
 
 void MarketOrderbook::print_summary(std::ostream& out) const {
