@@ -16,6 +16,28 @@ std::string format_fixed_point(double value) {
     return stream.str();
 }
 
+const nlohmann::json* find_side_levels(const nlohmann::json& payload, const std::string& side) {
+    static const std::vector<std::string> yes_keys = {
+        "yes_dollars_fp",
+        "yes_dollars",
+        "yes",
+    };
+    static const std::vector<std::string> no_keys = {
+        "no_dollars_fp",
+        "no_dollars",
+        "no",
+    };
+
+    const auto& keys = side == "yes" ? yes_keys : no_keys;
+    for (const auto& key : keys) {
+        if (payload.contains(key)) {
+            return &payload.at(key);
+        }
+    }
+
+    return nullptr;
+}
+
 }  // namespace
 
 void MarketOrderbook::set_levels(
@@ -43,8 +65,17 @@ void MarketOrderbook::set_levels(
 void MarketOrderbook::load_snapshot(const nlohmann::json& message) {
     const auto& payload = message.at("msg");
     market_ticker_ = payload.at("market_ticker").get<std::string>();
-    set_levels(yes_levels_, payload.at("yes_dollars_fp"));
-    set_levels(no_levels_, payload.at("no_dollars_fp"));
+
+    yes_levels_.clear();
+    no_levels_.clear();
+
+    if (const auto* yes_levels = find_side_levels(payload, "yes")) {
+        set_levels(yes_levels_, *yes_levels);
+    }
+
+    if (const auto* no_levels = find_side_levels(payload, "no")) {
+        set_levels(no_levels_, *no_levels);
+    }
 }
 
 void MarketOrderbook::apply_delta(const nlohmann::json& message) {

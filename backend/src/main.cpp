@@ -1,5 +1,6 @@
 #include <csignal>
 #include <cstdlib>
+#include <algorithm>
 #include <iostream>
 #include <map>
 #include <string>
@@ -10,8 +11,8 @@
 #include <spdlog/spdlog.h>
 
 #include "kalshi_auth.h"
-#include "kalshi_rest.h"
 #include "kalshi_ws.h"
+#include "market_registry.h"
 #include "orderbook.h"
 
 using json = nlohmann::json;
@@ -27,22 +28,6 @@ void handle_signal(int) {
 std::string read_env_or_default(const char* name, const std::string& fallback) {
     const char* value = std::getenv(name);
     return value ? std::string(value) : fallback;
-}
-
-std::vector<std::string> fetch_market_tickers(const std::string& series_ticker) {
-    const std::string markets_url =
-        "https://external-api.kalshi.com/trade-api/v2/markets"
-        "?series_ticker=" +
-        series_ticker + "&status=open";
-
-    const json markets_data = json::parse(fetch(markets_url));
-    std::vector<std::string> tickers;
-
-    for (const auto& market : markets_data["markets"]) {
-        tickers.push_back(market["ticker"].get<std::string>());
-    }
-
-    return tickers;
 }
 
 json make_subscribe_message(
@@ -77,21 +62,29 @@ void handle_message(
 
     if (type == "orderbook_snapshot") {
         const std::string ticker = message["msg"]["market_ticker"].get<std::string>();
-        books[ticker].load_snapshot(message);
-        spdlog::info("loaded snapshot for {}", ticker);
-        books[ticker].print_summary(std::cout);
+        try {
+            books[ticker].load_snapshot(message);
+            spdlog::debug("loaded snapshot for {}", ticker);
+        } catch (const std::exception& e) {
+            spdlog::warn("failed to load snapshot for {}: {}", ticker, e.what());
+            spdlog::debug("snapshot payload: {}", message.dump());
+        }
         return;
     }
 
     if (type == "orderbook_delta") {
         const std::string ticker = message["msg"]["market_ticker"].get<std::string>();
-        books[ticker].apply_delta(message);
-        spdlog::info(
-            "delta {} {} {} @ {}",
-            ticker,
-            message["msg"]["side"].get<std::string>(),
-            message["msg"]["delta_fp"].get<std::string>(),
-            message["msg"]["price_dollars"].get<std::string>());
+        try {
+            books[ticker].apply_delta(message);
+            spdlog::debug(
+                "delta {} {} {} @ {}",
+                ticker,
+                message["msg"]["side"].get<std::string>(),
+                message["msg"]["delta_fp"].get<std::string>(),
+                message["msg"]["price_dollars"].get<std::string>());
+        } catch (const std::exception& e) {
+            spdlog::warn("failed to apply delta for {}: {}", ticker, e.what());
+        }
         return;
     }
 
@@ -110,14 +103,20 @@ int main() {
         const std::string ws_url = read_env_or_default(
             "KALSHI_WS_URL",
             "wss://external-api-ws.kalshi.com/trade-api/ws/v2");
-        const std::string series_ticker = read_env_or_default("KALSHI_SERIES_TICKER", "KXWCADVANCE");
 
-        const std::vector<std::string> market_tickers = fetch_market_tickers(series_ticker);
+        spdlog::info("loading men's world cup market registry...");
+        const MarketRegistry registry = MarketRegistry::load_mens_world_cup_matches();
+        registry.print_summary(std::cout);
+
+        const std::vector<std::string> market_tickers = registry.all_tickers();
         if (market_tickers.empty()) {
-            throw std::runtime_error("no open markets found for series " + series_ticker);
+            throw std::runtime_error("no open men's world cup match markets found");
         }
 
-        spdlog::info("found {} open markets in {}", market_tickers.size(), series_ticker);
+        spdlog::info(
+            "found {} markets across {} matches",
+            market_tickers.size(),
+            registry.matches().size());
 
         const auto auth_headers = create_auth_headers(credentials, "GET", "/trade-api/ws/v2");
 
