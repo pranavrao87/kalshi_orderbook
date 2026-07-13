@@ -4,6 +4,7 @@
 
 void OrderbookSync::reset() {
     subscription_id_ = -1;
+    last_seq_ = -1;
     markets_.clear();
 }
 
@@ -23,6 +24,37 @@ std::optional<int> OrderbookSync::read_seq(const nlohmann::json& message) {
     return message["seq"].get<int>();
 }
 
+bool OrderbookSync::validate_subscription_seq(
+    const nlohmann::json& message,
+    const std::string& type) {
+    const auto seq = read_seq(message);
+    if (!seq) {
+        return true;
+    }
+
+    if (last_seq_ < 0) {
+        last_seq_ = *seq;
+        return true;
+    }
+
+    const int expected_seq = last_seq_ + 1;
+    if (*seq == expected_seq) {
+        last_seq_ = *seq;
+        return true;
+    }
+
+    spdlog::warn(
+        "subscription sequence gap: expected {}, got {} ({})",
+        expected_seq,
+        *seq,
+        type);
+
+    last_seq_ = *seq;
+
+    // Snapshots are full state and safe to apply even after a gap.
+    return type == "orderbook_snapshot";
+}
+
 BookUpdateResult OrderbookSync::handle_message(
     const nlohmann::json& message,
     MarketOrderbook& book) {
@@ -33,36 +65,21 @@ BookUpdateResult OrderbookSync::handle_message(
 
     const std::string ticker = message.at("msg").at("market_ticker").get<std::string>();
     MarketState& state = markets_[ticker];
-    const auto seq = read_seq(message);
+
+    if (!validate_subscription_seq(message, type)) {
+        state.has_snapshot = false;
+        return BookUpdateResult::GapDetected;
+    }
 
     if (type == "orderbook_snapshot") {
         book.load_snapshot(message);
-        if (seq) {
-            state.last_seq = *seq;
-        }
         state.has_snapshot = true;
         return BookUpdateResult::Updated;
     }
 
     if (!state.has_snapshot) {
-        spdlog::warn("delta for {} before snapshot, requesting resnapshot", ticker);
+        spdlog::debug("delta for {} before snapshot, requesting resnapshot", ticker);
         return BookUpdateResult::GapDetected;
-    }
-
-    if (seq) {
-        const int expected_seq = state.last_seq + 1;
-        if (state.last_seq >= 0 && *seq != expected_seq) {
-            spdlog::warn(
-                "sequence gap for {}: expected {}, got {}",
-                ticker,
-                expected_seq,
-                *seq);
-            state.has_snapshot = false;
-            state.last_seq = -1;
-            return BookUpdateResult::GapDetected;
-        }
-
-        state.last_seq = *seq;
     }
 
     book.apply_delta(message);

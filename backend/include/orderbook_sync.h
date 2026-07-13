@@ -29,12 +29,13 @@ public:
 
 private:
     struct MarketState {
-        int last_seq = -1;
         bool has_snapshot = false;
     };
 
     int subscription_id_ = -1;
+    int last_seq_ = -1;
     std::map<std::string, MarketState> markets_;
 
     static std::optional<int> read_seq(const nlohmann::json& message);
+    bool validate_subscription_seq(const nlohmann::json& message, const std::string& type);
 };
