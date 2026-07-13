@@ -27,14 +27,30 @@ KALSHI_MIN_ARB_EDGE=0.01
 
 The app loads `.env` automatically when you run it — no need to `export` or `source` each time. If you run from `backend/`, it will find `../.env`.
 
-Optional overrides:
+## Configuration
 
-```bash
-export KALSHI_WS_URL="wss://external-api-ws.kalshi.com/trade-api/ws/v2"
-export KALSHI_SERIES_TICKER="KXWCADVANCE"
+Non-secret runtime settings live in `config/settings.yaml`:
+
+```yaml
+kalshi:
+  ws_url: wss://external-api-ws.kalshi.com/trade-api/ws/v2
+  min_arb_edge: 0.01
+
+engine:
+  log_level: info
+  reconnect_initial_ms: 1000
+  reconnect_max_ms: 30000
+  scan_interval_ms: 0
+  pricing_summary_series: KXWCADVANCE,KXWCGAME,KXWCSCORE,KXWCTOTAL,KXWCMOV
 ```
 
-See `config/settings.yaml` for a template.
+Environment variables still override config when set:
+
+```bash
+KALSHI_WS_URL=...
+KALSHI_MIN_ARB_EDGE=0.01
+KALSHI_LOG_LEVEL=debug
+```
 
 ## Project layout
 
@@ -76,7 +92,7 @@ cmake --build build
 ./backend/build/kalshi_orderbook
 ```
 
-This connects to Kalshi's WebSocket API, subscribes to `orderbook_delta` for men's World Cup markets, maintains local orderbooks, and continuously scans mutually exclusive event groups for arbitrage. When the sum of executable YES asks across all outcomes is below `$1.00` by at least the configured edge threshold, it logs an `[ARB]` opportunity. Press `Ctrl+C` to stop and print a pricing summary.
+This connects to Kalshi's WebSocket API, subscribes to `orderbook_delta` for men's World Cup markets, maintains local orderbooks, tracks sequence numbers for consistency, auto-reconnects on disconnect, and continuously scans mutually exclusive event groups for arbitrage. When the sum of executable YES asks across all outcomes is below `$1.00` by at least the configured edge threshold, it logs an `[ARB]` opportunity. Press `Ctrl+C` to stop and print a pricing summary.
 
 ## Roadmap
 
@@ -85,3 +101,7 @@ This connects to Kalshi's WebSocket API, subscribes to `orderbook_delta` for men
 - [x] Add executable pricing helpers (best bid/ask, implied probability)
 - [x] Define arbitrage rules for related Kalshi markets (mutually exclusive YES-ask parity)
 - [x] Surface opportunities via live logs during streaming
+- [x] Orderbook sequence validation and resnapshot on gaps
+- [x] WebSocket auto-reconnect with exponential backoff
+- [x] Engine orchestration (`engine.cpp`)
+- [x] Config file support (`config/settings.yaml`)

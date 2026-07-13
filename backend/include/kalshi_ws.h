@@ -12,6 +12,7 @@ public:
     KalshiWebSocket& operator=(const KalshiWebSocket&) = delete;
 
     void connect(const std::map<std::string, std::string>& headers);
+    void reconnect(const std::map<std::string, std::string>& headers);
     void send_text(const std::string& message);
     std::string receive_text();
     void close();

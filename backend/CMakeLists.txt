@@ -11,6 +11,9 @@ find_package(spdlog REQUIRED)
 find_package(nlohmann_json REQUIRED)
 add_executable(kalshi_orderbook
   src/main.cpp
+  src/engine.cpp
+  src/config.cpp
+  src/orderbook_sync.cpp
   src/kalshi_rest.cpp
   src/kalshi_auth.cpp
   src/kalshi_ws.cpp

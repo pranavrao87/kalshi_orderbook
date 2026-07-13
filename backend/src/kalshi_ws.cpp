@@ -48,6 +48,11 @@ void KalshiWebSocket::connect(const std::map<std::string, std::string>& headers)
     header_list_ = header_list;
 }
 
+void KalshiWebSocket::reconnect(const std::map<std::string, std::string>& headers) {
+    close();
+    connect(headers);
+}
+
 void KalshiWebSocket::send_text(const std::string& message) {
     if (!curl_) {
         throw std::runtime_error("websocket is not connected");

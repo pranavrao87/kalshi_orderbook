@@ -1,8 +1,14 @@
-# Kalshi API credentials are loaded from environment variables.
-# Copy this file to .env and export the values before running.
-
 kalshi:
-  access_key: your_api_key_id
-  private_key_path: /path/to/kalshi_private_key.pem
   ws_url: wss://external-api-ws.kalshi.com/trade-api/ws/v2
-  series_ticker: KXWCADVANCE
+  min_arb_edge: 0.01
+
+engine:
+  log_level: info
+  reconnect_initial_ms: 1000
+  reconnect_max_ms: 30000
+  scan_interval_ms: 0
+  pricing_summary_series: KXWCADVANCE,KXWCGAME,KXWCSCORE,KXWCTOTAL,KXWCMOV
+
+# Credentials stay in .env (gitignored):
+#   KALSHI_ACCESS_KEY
+#   KALSHI_PRIVATE_KEY_PATH
