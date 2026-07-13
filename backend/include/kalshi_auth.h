@@ -8,6 +8,8 @@ struct KalshiCredentials {
     std::string private_key_path;
 };
 
+void load_dotenv_from_search_paths();
+
 KalshiCredentials load_credentials();
 
 std::map<std::string, std::string> create_auth_headers(

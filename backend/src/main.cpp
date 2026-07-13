@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+#include "arb_detector.h"
 #include "kalshi_auth.h"
 #include "kalshi_ws.h"
 #include "market_registry.h"
@@ -30,6 +31,75 @@ std::string read_env_or_default(const char* name, const std::string& fallback) {
     return value ? std::string(value) : fallback;
 }
 
+double read_min_arb_edge() {
+    const std::string value = read_env_or_default("KALSHI_MIN_ARB_EDGE", "0.01");
+    try {
+        return std::stod(value);
+    } catch (const std::exception&) {
+        spdlog::warn("invalid KALSHI_MIN_ARB_EDGE '{}', defaulting to 0.01", value);
+        return 0.01;
+    }
+}
+
+bool handle_message(
+    const json& message,
+    std::map<std::string, MarketOrderbook>& books) {
+    const std::string type = message.value("type", "");
+
+    if (type == "error") {
+        spdlog::error("websocket error: {}", message.dump());
+        return false;
+    }
+
+    if (type == "subscribed") {
+        spdlog::info("subscribed: {}", message.dump());
+        return false;
+    }
+
+    if (type == "orderbook_snapshot") {
+        const std::string ticker = message["msg"]["market_ticker"].get<std::string>();
+        try {
+            books[ticker].load_snapshot(message);
+            spdlog::debug("loaded snapshot for {}", ticker);
+            return true;
+        } catch (const std::exception& e) {
+            spdlog::warn("failed to load snapshot for {}: {}", ticker, e.what());
+            spdlog::debug("snapshot payload: {}", message.dump());
+        }
+        return false;
+    }
+
+    if (type == "orderbook_delta") {
+        const std::string ticker = message["msg"]["market_ticker"].get<std::string>();
+        try {
+            books[ticker].apply_delta(message);
+            spdlog::debug(
+                "delta {} {} {} @ {}",
+                ticker,
+                message["msg"]["side"].get<std::string>(),
+                message["msg"]["delta_fp"].get<std::string>(),
+                message["msg"]["price_dollars"].get<std::string>());
+            return true;
+        } catch (const std::exception& e) {
+            spdlog::warn("failed to apply delta for {}: {}", ticker, e.what());
+        }
+        return false;
+    }
+
+    spdlog::debug("ignored message type {}: {}", type, message.dump());
+    return false;
+}
+
+void scan_for_arbitrage(
+    const MarketRegistry& registry,
+    const std::map<std::string, MarketOrderbook>& books,
+    ArbDetector& arb_detector) {
+    const auto opportunities = arb_detector.scan(registry, books);
+    if (!opportunities.empty()) {
+        arb_detector.log_opportunities(opportunities);
+    }
+}
+
 json make_subscribe_message(
     int command_id,
     const std::vector<std::string>& market_tickers) {
@@ -43,52 +113,6 @@ json make_subscribe_message(
              {"use_yes_price", true},
          }},
     };
-}
-
-void handle_message(
-    const json& message,
-    std::map<std::string, MarketOrderbook>& books) {
-    const std::string type = message.value("type", "");
-
-    if (type == "error") {
-        spdlog::error("websocket error: {}", message.dump());
-        return;
-    }
-
-    if (type == "subscribed") {
-        spdlog::info("subscribed: {}", message.dump());
-        return;
-    }
-
-    if (type == "orderbook_snapshot") {
-        const std::string ticker = message["msg"]["market_ticker"].get<std::string>();
-        try {
-            books[ticker].load_snapshot(message);
-            spdlog::debug("loaded snapshot for {}", ticker);
-        } catch (const std::exception& e) {
-            spdlog::warn("failed to load snapshot for {}: {}", ticker, e.what());
-            spdlog::debug("snapshot payload: {}", message.dump());
-        }
-        return;
-    }
-
-    if (type == "orderbook_delta") {
-        const std::string ticker = message["msg"]["market_ticker"].get<std::string>();
-        try {
-            books[ticker].apply_delta(message);
-            spdlog::debug(
-                "delta {} {} {} @ {}",
-                ticker,
-                message["msg"]["side"].get<std::string>(),
-                message["msg"]["delta_fp"].get<std::string>(),
-                message["msg"]["price_dollars"].get<std::string>());
-        } catch (const std::exception& e) {
-            spdlog::warn("failed to apply delta for {}: {}", ticker, e.what());
-        }
-        return;
-    }
-
-    spdlog::debug("ignored message type {}: {}", type, message.dump());
 }
 
 void print_pricing_summary(
@@ -190,6 +214,10 @@ int main() {
         websocket.send_text(subscribe_message.dump());
         spdlog::info("subscribed to orderbook_delta for {} markets", market_tickers.size());
 
+        const double min_arb_edge = read_min_arb_edge();
+        ArbDetector arb_detector(min_arb_edge);
+        spdlog::info("arb detector enabled (min edge {:.2f}%)", min_arb_edge * 100.0);
+
         std::map<std::string, MarketOrderbook> books;
         while (g_running) {
             const std::string payload = websocket.receive_text();
@@ -202,8 +230,13 @@ int main() {
                 spdlog::error("payload starts with: {}", payload.substr(0, preview_length));
                 throw;
             }
-            handle_message(message, books);
+
+            if (handle_message(message, books)) {
+                scan_for_arbitrage(registry, books, arb_detector);
+            }
         }
+
+        scan_for_arbitrage(registry, books, arb_detector);
 
         print_pricing_summary(registry, books, std::cout);
         websocket.close();

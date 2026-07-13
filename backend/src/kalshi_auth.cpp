@@ -1,7 +1,10 @@
 #include "kalshi_auth.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cstdlib>
+#include <fstream>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
@@ -9,6 +12,64 @@
 #include <vector>
 
 namespace {
+
+std::string trim(std::string value) {
+    const auto not_space = [](unsigned char ch) { return !std::isspace(ch); };
+
+    value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
+    value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
+    return value;
+}
+
+std::string strip_quotes(std::string value) {
+    if (value.size() >= 2) {
+        const char first = value.front();
+        const char last = value.back();
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return value.substr(1, value.size() - 2);
+        }
+    }
+
+    return value;
+}
+
+bool file_exists(const std::string& path) {
+    std::ifstream file(path);
+    return file.good();
+}
+
+void load_dotenv_file(const std::string& path) {
+    std::ifstream file(path);
+    if (!file) {
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        line = trim(line);
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        const auto comment = line.find(" #");
+        if (comment != std::string::npos) {
+            line = trim(line.substr(0, comment));
+        }
+
+        const auto equals = line.find('=');
+        if (equals == std::string::npos) {
+            continue;
+        }
+
+        const std::string key = trim(line.substr(0, equals));
+        const std::string value = strip_quotes(trim(line.substr(equals + 1)));
+        if (key.empty() || value.empty()) {
+            continue;
+        }
+
+        setenv(key.c_str(), value.c_str(), 0);
+    }
+}
 
 std::string read_env(const char* name) {
     const char* value = std::getenv(name);
@@ -77,7 +138,24 @@ std::string sign_message(EVP_PKEY* private_key, const std::string& message) {
 
 }  // namespace
 
+void load_dotenv_from_search_paths() {
+    static const std::vector<std::string> candidates = {
+        ".env",
+        "../.env",
+        "../../.env",
+    };
+
+    for (const std::string& path : candidates) {
+        if (file_exists(path)) {
+            load_dotenv_file(path);
+            return;
+        }
+    }
+}
+
 KalshiCredentials load_credentials() {
+    load_dotenv_from_search_paths();
+
     KalshiCredentials credentials{
         .key_id = read_env("KALSHI_ACCESS_KEY"),
         .private_key_path = read_env("KALSHI_PRIVATE_KEY_PATH"),
@@ -85,7 +163,8 @@ KalshiCredentials load_credentials() {
 
     if (credentials.key_id.empty() || credentials.private_key_path.empty()) {
         throw std::runtime_error(
-            "missing credentials: set KALSHI_ACCESS_KEY and KALSHI_PRIVATE_KEY_PATH");
+            "missing credentials: set KALSHI_ACCESS_KEY and KALSHI_PRIVATE_KEY_PATH "
+            "in your environment or in a .env file at the repo root");
     }
 
     return credentials;

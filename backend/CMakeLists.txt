@@ -16,6 +16,7 @@ add_executable(kalshi_orderbook
   src/kalshi_ws.cpp
   src/orderbook.cpp
   src/market_registry.cpp
+  src/arb_detector.cpp
 )
 target_link_libraries(kalshi_orderbook PRIVATE CURL::libcurl OpenSSL::SSL OpenSSL::Crypto spdlog::spdlog nlohmann_json::nlohmann_json)
 target_include_directories(kalshi_orderbook PRIVATE include)

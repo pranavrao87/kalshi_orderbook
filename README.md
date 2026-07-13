@@ -17,19 +17,15 @@ Early prototype. The backend discovers open markets via REST, then connects to K
 
 ## Credentials
 
-WebSocket connections require Kalshi API credentials. Create a `.env` file from the template:
+WebSocket connections require Kalshi API credentials. Put them in a `.env` file at the repo root (already gitignored):
 
 ```bash
-cp .env.example .env
+KALSHI_ACCESS_KEY=your_api_key_id
+KALSHI_PRIVATE_KEY_PATH=/absolute/path/to/secrets/kalshi_private_key.pem
+KALSHI_MIN_ARB_EDGE=0.01
 ```
 
-Put your API key ID in `KALSHI_ACCESS_KEY` and point `KALSHI_PRIVATE_KEY_PATH` at a separate PEM file (not the `.env` file itself). Then load it:
-
-```bash
-set -a && source .env && set +a
-```
-
-The app reads environment variables only; it does not parse multi-line PEM content inside `.env`.
+The app loads `.env` automatically when you run it — no need to `export` or `source` each time. If you run from `backend/`, it will find `../.env`.
 
 Optional overrides:
 
@@ -77,17 +73,15 @@ cmake --build build
 ## Run
 
 ```bash
-export KALSHI_ACCESS_KEY="your_api_key_id"
-export KALSHI_PRIVATE_KEY_PATH="/path/to/kalshi_private_key.pem"
 ./backend/build/kalshi_orderbook
 ```
 
-This connects to Kalshi's WebSocket API, subscribes to `orderbook_delta` for all open markets in the configured series, prints the initial snapshot for each market, and logs incremental updates until you press `Ctrl+C`.
+This connects to Kalshi's WebSocket API, subscribes to `orderbook_delta` for men's World Cup markets, maintains local orderbooks, and continuously scans mutually exclusive event groups for arbitrage. When the sum of executable YES asks across all outcomes is below `$1.00` by at least the configured edge threshold, it logs an `[ARB]` opportunity. Press `Ctrl+C` to stop and print a pricing summary.
 
 ## Roadmap
 
 - [x] Subscribe to Kalshi orderbook / market data feeds
 - [x] Maintain per-market bid/ask books locally
 - [x] Add executable pricing helpers (best bid/ask, implied probability)
-- [ ] Define arbitrage rules for related Kalshi markets
-- [ ] Surface opportunities (logs, alerts, or frontend)
+- [x] Define arbitrage rules for related Kalshi markets (mutually exclusive YES-ask parity)
+- [x] Surface opportunities via live logs during streaming
