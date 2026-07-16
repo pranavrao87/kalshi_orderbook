@@ -136,8 +136,11 @@ public:
             market_tickers_.size(),
             registry_.matches().size());
 
-        arb_detector_ = ArbDetector(config_.min_arb_edge);
-        spdlog::info("arb detector enabled (min edge {:.2f}%)", config_.min_arb_edge * 100.0);
+        arb_detector_ = ArbDetector(config_.min_arb_edge, config_.taker_fee_coeff);
+        spdlog::info(
+            "arb detector enabled (min edge {:.2f}%, taker fee coeff {:.4f})",
+            config_.min_arb_edge * 100.0,
+            config_.taker_fee_coeff);
 
         int reconnect_delay_ms = config_.reconnect_initial_ms;
         while (g_running) {
@@ -176,7 +179,7 @@ private:
     std::vector<std::string> market_tickers_;
     std::unique_ptr<KalshiWebSocket> websocket_;
     OrderbookSync sync_;
-    ArbDetector arb_detector_{0.01};
+    ArbDetector arb_detector_{0.01, 0.07};
     std::map<std::string, MarketOrderbook> books_;
     int next_command_id_ = 1;
     std::chrono::steady_clock::time_point last_scan_{};

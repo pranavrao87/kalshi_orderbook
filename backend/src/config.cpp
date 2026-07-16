@@ -105,6 +105,8 @@ void apply_yaml_value(AppConfig& config, const std::string& section, const std::
             config.ws_url = value;
         } else if (key == "min_arb_edge") {
             config.min_arb_edge = parse_double(value, config.min_arb_edge);
+        } else if (key == "taker_fee_coeff") {
+            config.taker_fee_coeff = parse_double(value, config.taker_fee_coeff);
         }
         return;
     }
@@ -114,6 +116,8 @@ void apply_yaml_value(AppConfig& config, const std::string& section, const std::
             config.log_level = value;
         } else if (key == "min_arb_edge") {
             config.min_arb_edge = parse_double(value, config.min_arb_edge);
+        } else if (key == "taker_fee_coeff") {
+            config.taker_fee_coeff = parse_double(value, config.taker_fee_coeff);
         } else if (key == "reconnect_initial_ms") {
             config.reconnect_initial_ms = parse_int(value, config.reconnect_initial_ms);
         } else if (key == "reconnect_max_ms") {
@@ -174,6 +178,11 @@ void apply_env_overrides(AppConfig& config) {
     const std::string min_edge = read_env_or_empty("KALSHI_MIN_ARB_EDGE");
     if (!min_edge.empty()) {
         config.min_arb_edge = parse_double(min_edge, config.min_arb_edge);
+    }
+
+    const std::string fee_coeff = read_env_or_empty("KALSHI_TAKER_FEE_COEFF");
+    if (!fee_coeff.empty()) {
+        config.taker_fee_coeff = parse_double(fee_coeff, config.taker_fee_coeff);
     }
 
     const std::string log_level = read_env_or_empty("KALSHI_LOG_LEVEL");

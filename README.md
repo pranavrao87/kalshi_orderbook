@@ -92,15 +92,24 @@ cmake --build build
 ./backend/build/kalshi_orderbook
 ```
 
-This connects to Kalshi's WebSocket API, subscribes to `orderbook_delta` for men's World Cup markets, maintains local orderbooks, tracks sequence numbers for consistency, auto-reconnects on disconnect, and continuously scans mutually exclusive event groups for arbitrage. When the sum of executable YES asks across all outcomes is below `$1.00` by at least the configured edge threshold, it logs an `[ARB]` opportunity. Press `Ctrl+C` to stop and print a pricing summary.
+This connects to Kalshi's WebSocket API, maintains local orderbooks, and continuously scans for fee-aware arbitrage:
+
+- `mutually_exclusive` — sum of YES asks across a complete outcome set < $1
+- `yes_no_parity` — YES ask + NO ask < $1 on the same market
+- `score_to_ml` — regulation correct-score basket cheaper than moneyline outcome
+- `score_to_btts` — both-teams-score scorelines cheaper than BTTS Yes
+- `score_to_total` — scorelines implying Over X.5 cheaper than that totals market
+
+Fees use Kalshi's taker formula `round_up(0.07 × P × (1-P))` per contract (configurable via `taker_fee_coeff`). Score-basket rules are relative-value signals because Kalshi's correct-score set is incomplete (not every possible score is listed). Press `Ctrl+C` to stop and print a pricing summary.
 
 ## Roadmap
 
 - [x] Subscribe to Kalshi orderbook / market data feeds
 - [x] Maintain per-market bid/ask books locally
 - [x] Add executable pricing helpers (best bid/ask, implied probability)
-- [x] Define arbitrage rules for related Kalshi markets (mutually exclusive YES-ask parity)
+- [x] Define arbitrage rules for related Kalshi markets (mutually exclusive, YES/NO parity, score baskets)
 - [x] Surface opportunities via live logs during streaming
+- [x] Fee-aware edge calculations (Kalshi taker fee)
 - [x] Orderbook sequence validation and resnapshot on gaps
 - [x] WebSocket auto-reconnect with exponential backoff
 - [x] Engine orchestration (`engine.cpp`)

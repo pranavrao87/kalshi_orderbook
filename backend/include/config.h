@@ -6,6 +6,7 @@
 struct AppConfig {
     std::string ws_url = "wss://external-api-ws.kalshi.com/trade-api/ws/v2";
     double min_arb_edge = 0.01;
+    double taker_fee_coeff = 0.07;
     std::string log_level = "info";
     int reconnect_initial_ms = 1000;
     int reconnect_max_ms = 30000;
@@ -15,6 +16,7 @@ struct AppConfig {
         "KXWCGAME",
         "KXWCSCORE",
         "KXWCTOTAL",
+        "KXWCBTTS",
         "KXWCMOV",
     };
 };

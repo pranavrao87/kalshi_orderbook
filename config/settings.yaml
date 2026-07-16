@@ -1,13 +1,14 @@
 kalshi:
   ws_url: wss://external-api-ws.kalshi.com/trade-api/ws/v2
   min_arb_edge: 0.01
+  taker_fee_coeff: 0.07
 
 engine:
   log_level: info
   reconnect_initial_ms: 1000
   reconnect_max_ms: 30000
   scan_interval_ms: 0
-  pricing_summary_series: KXWCADVANCE,KXWCGAME,KXWCSCORE,KXWCTOTAL,KXWCMOV
+  pricing_summary_series: KXWCADVANCE,KXWCGAME,KXWCSCORE,KXWCTOTAL,KXWCBTTS,KXWCMOV
 
 # Credentials stay in .env (gitignored):
 #   KALSHI_ACCESS_KEY
